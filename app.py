@@ -1,5 +1,6 @@
 import random
-
+import html
+import re
 import streamlit as st
 
 from groq_api import get_tarot_reading
@@ -161,7 +162,17 @@ def page_question():
             elif len(trimmed) < 10:
                 st.warning("問題至少需要 10 個字，請描述得更具體一些。")
             else:
-                st.session_state.question = trimmed
+                # 【防護核心：輸入端消毒與個資遮蔽】
+                # 1. 防止 XSS：將特殊符號轉換為安全字元 (例如 < 變成 &lt;)
+                safe_question = html.escape(trimmed)
+                
+                # 2. 防止隱私外洩：遮蔽身分證字號與台灣手機號碼
+                safe_question = re.sub(r'[A-Za-z][12]\d{8}', '***', safe_question)
+                safe_question = re.sub(r'09\d{2}-?\d{3}-?\d{3}', '***', safe_question)
+
+                # 將消毒過的安全字串存入系統狀態
+                st.session_state.question = safe_question
+                
                 st.session_state.drawn_cards = []
                 st.session_state.ai_reading = ""
                 st.session_state.api_error = ""
@@ -187,9 +198,13 @@ def page_reading():
                     st.session_state.drawn_cards,
                 )
         except Exception as exc:
+            # 安全實務：將真實錯誤寫入後端 Log，不暴露給前端使用者
+            print(f"[System Error] Groq API 呼叫失敗: {exc}") 
+            
+            # 前端僅顯示通用且去識別化的錯誤訊息
             st.session_state.api_error = (
-                f"解讀過程中發生錯誤：{exc}\n\n"
-                "請確認 .env 中的 GROQ_API_KEY 是否正確設定，稍後再試。"
+                "宇宙的訊號暫時受到干擾，無法為您解讀牌面。\n\n"
+                "這可能是系統繁忙或網路連線問題，請稍後重試。"
             )
 
     st.session_state.page = "RESULT"
